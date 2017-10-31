@@ -1,0 +1,164 @@
+# to use math functions like trig and rounding
+import math
+import random
+import matplotlib.pyplot as plt
+# create point and line segment named tuple template
+from collections import namedtuple
+
+Point = namedtuple('Point', 'x y')
+Lineseg = namedtuple('Lineseg', 's e')
+SlopeIntercept = namedtuple('SlopeIntercept', 'm b'
+# helper function for intersection test. Checks orientation of points A, B, and C
+def ccw(a, b, c):
+    return (c.y - a.y) * (b.x - a.x) > (b.y - a.y) * (c.x - a.x)
+
+def line(segment):
+    A = (segment.s.y - segment.e.y)
+    B = (segment.e.x - segment.s.x)
+    C = (segment.s.x*segment.e.y - segment.e.x*segment.e.y)
+    return A, B, -C
+
+# Return true if line segments s1e1 and s2e2 intersect
+def intersect(line1, line2):
+    s1 = line1.s
+    s2 = line2.s
+    e1 = line1.e
+    e2 = line2.e
+    return ccw(s1, s2, e2) != ccw(e1, s2, e2) and ccw(s1, e1, s2) != ccw(s1, e1, e2)
+
+
+# create a really long Lineseg starting at point start and extending in the given angle.
+def ray(start, angle, length=1e9):
+    return Lineseg(start, Point(start.x + math.cos(angle) * length, start.y + math.sin(angle) * length))
+
+
+# make a chain of Linesegs
+def chain(points):
+    out = []
+    for i in range(0, len(points) - 1):
+        out.append(Lineseg(points[i], points[i + 1]))
+    return out
+
+
+# Create a closed loop of Linesegs
+def loop(points):
+    out = chain(points)
+    out.append(Lineseg(points[len(points) - 1], points[0]))
+    return out
+
+#returns the slope of a line segment
+def slope_intercept(segment):
+    if segment.e.x - segment.s.x == 0:
+        return False
+    m = (segment.e.y-segment.s.y)/(segment.e.x - segment.s.x)
+    b = -segment.s.x * m + segment.s.y
+    return SlopeIntercept(m,b)
+
+#finds the point where two lines intersect
+def intersect_point(segment1, segment2):
+    #check if the lines intersect
+    if intersect(segment1, segment2):
+        #L1 = line(segment1)
+        #L2 = line(segment2)
+        si1 = slope_intercept(segment1)
+        si2 = slope_intercept(segment2)
+        if si1 and si2:
+            #if neither line is vertical
+            x = (si2.b - si1.b) / (si1.m - si2.m)
+            y = si1.m * x + si1.b
+            return Point(x,y)
+        elif not si2:
+            #only segment2 is vertical
+            x = segment2.s.x
+            y = si1.m * x + si1.b
+            return Point(x,y)
+        elif not si1:
+            #only segment1 is vertical
+            x = segment1.s.x
+            y = si2.m * x + si2.b
+            return Point(x, y)
+        else:
+            #both vertical, no intersection
+            print ('both vert')
+            return False
+        '''
+        D = L1[0] * L2[1] - L1[1] * L2[0]
+        Dx = L1[2] * L2[1] - L1[1] * L2[2]
+        Dy = L1[0] * L2[2] - L1[2] * L2[0]
+        if D != 0:
+            x = Dx / D
+            y = Dy / D
+            return Point(x, y)
+        else:
+            return False'''
+    else:
+        return False
+
+def distance(point1, point2):
+    deltaX = point2.x - point1.x
+    deltaY = point2.y - point1.y
+    return math.sqrt(deltaX * deltaX + deltaY * deltaY)
+
+#simulates lidar
+def lidar(point, angle, numRays, rayRange, lines):
+    #list to hold lengths
+    lengths = []
+    #list to hold points
+    points = []
+    #loop through scan
+    for rayNum in range(0,numRays):
+        #calculate angle of ray
+        rayAngle = math.pi * 2 * rayNum / numRays + angle
+        #there's some bugs with horizontal and vertical rays, so just change them a little.
+        if rayAngle % (math.pi/2) == 0:
+            rayAngle += 0.0001
+        #create ray
+        beam = ray(point, rayAngle, rayRange)
+        #whether any line is hit and the shortest distance
+        any = False
+        shortest = rayRange
+        shortPoint = Point(0,0)
+        #loop through all lines and get the shortest intersection
+        for line in  lines:
+            intersection = intersect_point(beam, line)
+            if intersection:
+                any = True
+                dist = distance(point, intersection)
+                if dist < shortest and intersection != Point(0,0) and dist != 0:
+                    shortest = dist
+                    shortPoint = intersection
+
+        #if the laser hit anything, add it, and add 0 otherwise
+        if any:
+            lengths.append(shortest)
+            points.append(shortPoint)
+        else:
+            #print('no intersect for ray:' + str(beam))
+            lengths.append(0)
+            points.append(point)
+
+    return lengths, points
+
+def addNoise(values, noisePct):
+    outValues = []
+    for val in values:
+        outValues.append(val * random.uniform(1-noisePct, 1 + noisePct))
+    return outValues
+
+def simLidar(point, angle, numScans, maxRange, noisePct, lines):
+    scan,points = lidar(point, angle, numScans, maxRange, lines)
+    return addNoise(scan, noisePct), points
+
+
+def plotScan(scan, points = None):
+    plt.figure(1)
+    plt.plot(scan, 'b.')
+    plt.xlabel('scan number')
+    plt.ylabel('distance')
+
+    plt.figure(2)
+    plt.plot([p.x for p in points], [p.y for p in points], 'b.')
+    plt.grid(True)
+
+    plt.show()
+
